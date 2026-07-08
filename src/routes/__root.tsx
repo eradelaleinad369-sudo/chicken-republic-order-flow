@@ -85,6 +85,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: "Chicken Republic — Order Dashboard" },
+      { name: "twitter:description", content: "Live staff order dashboard for Chicken Republic — manage orders in realtime." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/ccb2dca1-de8a-4dd6-aa56-f8244d5cc533/id-preview-639fc326--9706e6c9-5d73-410d-8db1-a798b1450892.lovable.app-1783510993516.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/ccb2dca1-de8a-4dd6-aa56-f8244d5cc533/id-preview-639fc326--9706e6c9-5d73-410d-8db1-a798b1450892.lovable.app-1783510993516.png" },
     ],
     links: [
       {
