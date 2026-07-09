@@ -5,7 +5,12 @@ const SUPABASE_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpiaGxmbHhmdmVmZ3ViYmp1ZGFxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4MzQxODksImV4cCI6MjA5ODQxMDE4OX0.zzYSmhQyA4rj0q_LQL-tI8e4VxAjQKZPwgR4heOx45k";
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  auth: { persistSession: false, autoRefreshToken: false },
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    storage: typeof window !== "undefined" ? window.localStorage : undefined,
+    storageKey: "chicken-republic-auth",
+  },
 });
 
 export type OrderStatus = "New" | "Preparing" | "Ready" | "Done";
