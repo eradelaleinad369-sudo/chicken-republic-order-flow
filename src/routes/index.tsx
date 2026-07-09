@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { supabase, STATUSES, nextStatus, type RepublicOrder, type OrderStatus } from "@/lib/supabase";
+import type { Session } from "@supabase/supabase-js";
 
 export const Route = createFileRoute("/")({
   component: Dashboard,
@@ -49,6 +50,93 @@ function playBeep() {
 }
 
 function Dashboard() {
+  const [session, setSession] = useState<Session | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      setAuthChecked(true);
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
+      setSession(s);
+    });
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  if (!authChecked) {
+    return <div className="flex min-h-screen items-center justify-center bg-slate-50 text-slate-500">Loading…</div>;
+  }
+
+  if (!session) {
+    return <LoginScreen />;
+  }
+
+  return <DashboardInner userEmail={session.user.email ?? ""} />;
+}
+
+function LoginScreen() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setErr(null);
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) setErr("Invalid email or password.");
+    setBusy(false);
+  };
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+      <form onSubmit={submit} className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+        <div className="mb-6 flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-600 text-xl">🍗</div>
+          <div>
+            <h1 className="text-lg font-bold text-slate-900">Chicken Republic</h1>
+            <p className="text-xs text-slate-500">Staff sign in</p>
+          </div>
+        </div>
+        <label className="block text-sm font-medium text-slate-700">
+          Email
+          <input
+            type="email"
+            required
+            autoFocus
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="mt-1 h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900"
+          />
+        </label>
+        <label className="mt-4 block text-sm font-medium text-slate-700">
+          Password
+          <input
+            type="password"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="mt-1 h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900"
+          />
+        </label>
+        {err && (
+          <div className="mt-4 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800">{err}</div>
+        )}
+        <button
+          type="submit"
+          disabled={busy}
+          className="mt-6 h-12 w-full rounded-xl bg-slate-900 text-base font-bold text-white transition hover:bg-slate-800 disabled:opacity-60"
+        >
+          {busy ? "Signing in…" : "Sign in"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function DashboardInner({ userEmail }: { userEmail: string }) {
   const [orders, setOrders] = useState<RepublicOrder[]>([]);
   const [filter, setFilter] = useState<"All" | OrderStatus>("All");
   const [flashIds, setFlashIds] = useState<Set<number>>(new Set());
@@ -200,6 +288,15 @@ function Dashboard() {
                 </button>
               );
             })}
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="hidden text-xs text-slate-500 sm:inline">{userEmail}</span>
+            <button
+              onClick={() => supabase.auth.signOut()}
+              className="rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-200"
+            >
+              Log out
+            </button>
           </div>
         </div>
       </header>
