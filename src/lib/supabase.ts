@@ -22,6 +22,31 @@ export interface RepublicOrder {
   Order: string | null;
   Amount: number | null;
   Status: OrderStatus | string | null;
+  payment_status?: string | null;
+  table_number?: string | number | null;
+  public_code?: string | null;
+}
+
+export interface PendingOrder {
+  id: number;
+  created_at: string;
+  customer_name: string | null;
+  order_summary: string | null;
+  amount: number | null;
+  status: string | null;
+  table_number: string | number | null;
+  public_code: string | null;
+  payment_status: string | null;
+  minutes_waiting: number | null;
+}
+
+export interface MenuItem {
+  id: number | string;
+  name?: string | null;
+  item_name?: string | null;
+  price?: number | null;
+  category?: string | null;
+  is_available: boolean | null;
 }
 
 export const STATUSES: OrderStatus[] = ["New", "Preparing", "Ready", "Done"];

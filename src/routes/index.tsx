@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { supabase, STATUSES, nextStatus, type RepublicOrder, type OrderStatus } from "@/lib/supabase";
+import { Link } from "@tanstack/react-router";
+import { supabase, STATUSES, nextStatus, type RepublicOrder, type OrderStatus, type PendingOrder } from "@/lib/supabase";
 import type { Session } from "@supabase/supabase-js";
 
 export const Route = createFileRoute("/")({
@@ -143,6 +144,7 @@ function DashboardInner({ userEmail }: { userEmail: string }) {
   const [, setTick] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState<PendingOrder[]>([]);
   const initialLoaded = useRef(false);
   const knownIds = useRef<Set<number>>(new Set());
 
@@ -151,6 +153,17 @@ function DashboardInner({ userEmail }: { userEmail: string }) {
     const i = setInterval(() => setTick((t) => t + 1), 30_000);
     return () => clearInterval(i);
   }, []);
+
+  const loadPending = useCallback(async () => {
+    const { data, error } = await supabase.from("v_pending_orders").select("*");
+    if (!error && data) setPending(data as PendingOrder[]);
+  }, []);
+
+  useEffect(() => {
+    loadPending();
+    const i = setInterval(loadPending, 20_000);
+    return () => clearInterval(i);
+  }, [loadPending]);
 
   const flashCard = useCallback((id: number) => {
     setFlashIds((prev) => {
@@ -231,7 +244,20 @@ function DashboardInner({ userEmail }: { userEmail: string }) {
       // revert
       setOrders((prev) => prev.map((o) => (o.id === order.id ? order : o)));
     }
+    loadPending();
   }, []);
+
+  const togglePaid = useCallback(async (order: RepublicOrder) => {
+    const current = (order.payment_status || "unpaid").toLowerCase();
+    const nextPay = current === "paid" ? "unpaid" : "paid";
+    setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, payment_status: nextPay } : o)));
+    const { error } = await supabase.from(TABLE).update({ payment_status: nextPay }).eq("id", order.id);
+    if (error) {
+      setError(error.message);
+      setOrders((prev) => prev.map((o) => (o.id === order.id ? order : o)));
+    }
+    loadPending();
+  }, [loadPending]);
 
   const counts = useMemo(() => {
     const c: Record<string, number> = { All: orders.length, New: 0, Preparing: 0, Ready: 0, Done: 0 };
@@ -291,6 +317,12 @@ function DashboardInner({ userEmail }: { userEmail: string }) {
           </div>
           <div className="flex items-center gap-3">
             <span className="hidden text-xs text-slate-500 sm:inline">{userEmail}</span>
+            <Link
+              to="/admin"
+              className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+            >
+              Admin
+            </Link>
             <button
               onClick={() => supabase.auth.signOut()}
               className="rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-200"
@@ -306,6 +338,57 @@ function DashboardInner({ userEmail }: { userEmail: string }) {
           <div className="mb-4 rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800">
             {error}
           </div>
+        )}
+        {pending.length > 0 && (
+          <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-base font-bold text-slate-900">
+                Pending orders <span className="text-slate-400">({pending.length})</span>
+              </h2>
+              <span className="text-xs text-slate-500">Oldest first · red = waiting &gt;15m</span>
+            </div>
+            <ul className="divide-y divide-slate-100">
+              {pending.map((p) => {
+                const mins = Number(p.minutes_waiting ?? 0);
+                const tone =
+                  mins > 15
+                    ? "bg-red-50 border-l-4 border-red-500"
+                    : mins > 10
+                    ? "bg-amber-50 border-l-4 border-amber-500"
+                    : "";
+                return (
+                  <li key={p.id} className={`flex flex-wrap items-center gap-3 px-3 py-2 text-sm ${tone}`}>
+                    <span className="w-14 font-mono text-xs text-slate-500">#{p.id}</span>
+                    <span className="min-w-[8rem] font-semibold text-slate-800">{p.customer_name || "—"}</span>
+                    <span className="flex-1 truncate text-slate-600">{p.order_summary || "—"}</span>
+                    <span className="font-bold text-slate-900">₦{Number(p.amount ?? 0).toLocaleString()}</span>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs font-bold uppercase ${
+                        (p.payment_status || "").toLowerCase() === "paid"
+                          ? "bg-green-100 text-green-800"
+                          : "bg-slate-200 text-slate-700"
+                      }`}
+                    >
+                      {p.payment_status || "unpaid"}
+                    </span>
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">
+                      {p.status}
+                    </span>
+                    {p.table_number != null && (
+                      <span className="text-xs text-slate-500">Table {p.table_number}</span>
+                    )}
+                    <span
+                      className={`text-xs font-bold ${
+                        mins > 15 ? "text-red-700" : mins > 10 ? "text-amber-700" : "text-slate-500"
+                      }`}
+                    >
+                      {mins}m waiting
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
         )}
         {loading ? (
           <div className="py-24 text-center text-slate-500">Loading orders…</div>
@@ -335,13 +418,29 @@ function DashboardInner({ userEmail }: { userEmail: string }) {
                         {timeAgo(o.created_at)} · #{o.id}
                       </p>
                     </div>
-                    <span
-                      className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide ring-1 ${
-                        statusStyles[status] || statusStyles.New
-                      }`}
-                    >
-                      {status}
-                    </span>
+                    <div className="flex flex-col items-end gap-1">
+                      <span
+                        className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide ring-1 ${
+                          statusStyles[status] || statusStyles.New
+                        }`}
+                      >
+                        {status}
+                      </span>
+                      {(() => {
+                        const paid = (o.payment_status || "").toLowerCase() === "paid";
+                        return (
+                          <span
+                            className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ring-1 ${
+                              paid
+                                ? "bg-green-100 text-green-800 ring-green-300"
+                                : "bg-slate-200 text-slate-700 ring-slate-300"
+                            }`}
+                          >
+                            {paid ? "Paid" : "Unpaid"}
+                          </span>
+                        );
+                      })()}
+                    </div>
                   </div>
 
                   <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">
@@ -363,6 +462,16 @@ function DashboardInner({ userEmail }: { userEmail: string }) {
                       }`}
                     >
                       {isDone ? "Completed" : `Mark ${nextStatus(status)}`}
+                    </button>
+                    <button
+                      onClick={() => togglePaid(o)}
+                      className={`h-11 w-full rounded-xl text-sm font-bold transition ${
+                        (o.payment_status || "").toLowerCase() === "paid"
+                          ? "bg-green-600 text-white hover:bg-green-700"
+                          : "bg-slate-200 text-slate-800 hover:bg-slate-300"
+                      }`}
+                    >
+                      {(o.payment_status || "").toLowerCase() === "paid" ? "Mark Unpaid" : "Mark Paid"}
                     </button>
                     <label className="text-xs font-medium text-slate-500">
                       Set status
