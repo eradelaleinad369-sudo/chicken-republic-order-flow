@@ -497,4 +497,35 @@ function DashboardInner({ userEmail }: { userEmail: string }) {
                       className={`h-11 w-full rounded-xl text-sm font-bold transition ${
                         (o.payment_status || "").toLowerCase() === "paid"
                           ? "bg-green-600 text-white hover:bg-green-700"
-              
+                          : "bg-red-600 text-white hover:bg-red-700"
+                      }`}
+                    >
+                      {(o.payment_status || "").toLowerCase() === "paid" ? "Paid" : "Pending Payment"}
+                    </button>
+                    <label className="text-xs font-medium text-slate-500">
+                      Set status
+                      <select
+                        value={status}
+                        onChange={(e) =>
+                          updateStatus(o, e.target.value as OrderStatus)
+                        }
+                        className="mt-1 h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800"
+                      >
+                        {STATUSES.map((s) => (
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
+
