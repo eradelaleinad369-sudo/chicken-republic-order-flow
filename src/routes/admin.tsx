@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, type FormEvent } from "react";
 import { supabase, type MenuItem } from "@/lib/supabase";
 import type { Session } from "@supabase/supabase-js";
 import {
@@ -58,6 +58,13 @@ function AdminInner() {
   const [byStatus, setByStatus] = useState<any[]>([]);
   const [topItems, setTopItems] = useState<any[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [newItemName, setNewItemName] = useState("");
+  const [newItemPrice, setNewItemPrice] = useState("");
+  const [newItemCategory, setNewItemCategory] = useState("Top Sellers");
+  const [newItemEmoji, setNewItemEmoji] = useState("");
+  const [addingItem, setAddingItem] = useState(false);
+  const [addItemError, setAddItemError] = useState<string | null>(null);
+  const [addItemSuccess, setAddItemSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [exporting, setExporting] = useState(false);
@@ -148,16 +155,66 @@ function AdminInner() {
     }
   };
 
+  const addMenuItem = async (e: FormEvent) => {
+    e.preventDefault();
+    setAddItemError(null);
+    setAddItemSuccess(false);
+
+    const trimmedName = newItemName.trim();
+    const priceNum = parseFloat(newItemPrice);
+
+    if (!trimmedName) {
+      setAddItemError("Name is required.");
+      return;
+    }
+    if (!newItemPrice || isNaN(priceNum) || priceNum <= 0) {
+      setAddItemError("Price must be a number greater than 0.");
+      return;
+    }
+
+    setAddingItem(true);
+    const { data, error } = await supabase
+      .from("menu_items")
+      .insert({
+        name: trimmedName,
+        price: priceNum,
+        category: newItemCategory,
+        emoji: newItemEmoji.trim() || null,
+        is_available: true,
+      })
+      .select()
+      .single();
+    setAddingItem(false);
+
+    if (error) {
+      setAddItemError(error.message);
+      return;
+    }
+
+    setMenuItems((prev) => [...prev, data as MenuItem]);
+    setNewItemName("");
+    setNewItemPrice("");
+    setNewItemEmoji("");
+    setAddItemSuccess(true);
+    setTimeout(() => setAddItemSuccess(false), 3000);
+  };
+
+  const formatHour12 = (h: number) => {
+    const period = h < 12 ? "AM" : "PM";
+    const h12 = h % 12 === 0 ? 12 : h % 12;
+    return `${h12}${period}`;
+  };
+
   const hourData = Array.from({ length: 24 }, (_, h) => {
     const row = byHour.find((r) => Number(r.hour_of_day) === h);
-    return { hour: `${h}`, orders: Number(row?.order_count ?? 0) };
+    return { hour: formatHour12(h), orders: Number(row?.order_count ?? 0) };
   });
 
   const dayData = revByDay
     .slice()
     .sort((a, b) => String(a.day).localeCompare(String(b.day)))
     .map((r) => ({
-      day: String(r.day).slice(5),
+      day: new Date(String(r.day)).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
       revenue: Number(r.revenue ?? 0),
     }));
 
@@ -218,7 +275,7 @@ function AdminInner() {
                 <BarChart data={dayData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                   <XAxis dataKey="day" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => (v >= 1000 ? `₦${(v / 1000).toFixed(0)}k` : `₦${v}`)} />
                   <Tooltip formatter={(v: any) => `₦${Number(v).toLocaleString()}`} />
                   <Bar dataKey="revenue" fill="#dc2626" radius={[4, 4, 0, 0]} />
                 </BarChart>
@@ -281,6 +338,61 @@ function AdminInner() {
         </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="mb-4 text-base font-bold text-slate-900">Add new menu item</h2>
+          <form onSubmit={addMenuItem} className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+            <input
+              type="text"
+              value={newItemName}
+              onChange={(e) => setNewItemName(e.target.value)}
+              placeholder="Item name"
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none sm:col-span-2"
+            />
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              value={newItemPrice}
+              onChange={(e) => setNewItemPrice(e.target.value)}
+              placeholder="Price (₦)"
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
+            />
+            <select
+              value={newItemCategory}
+              onChange={(e) => setNewItemCategory(e.target.value)}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
+            >
+              <option>Top Sellers</option>
+              <option>Burgers & Sandwiches</option>
+              <option>Citizens Meals</option>
+              <option>Drinks</option>
+              <option>POT Meals</option>
+              <option>Tasty Sides</option>
+            </select>
+            <input
+              type="text"
+              value={newItemEmoji}
+              onChange={(e) => setNewItemEmoji(e.target.value)}
+              placeholder="Emoji (optional)"
+              maxLength={4}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
+            />
+            <button
+              type="submit"
+              disabled={addingItem}
+              className="rounded-lg bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-50 sm:col-span-3"
+            >
+              {addingItem ? "Adding…" : "Add Item"}
+            </button>
+          </form>
+          {addItemError && (
+            <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-800">{addItemError}</p>
+          )}
+          {addItemSuccess && (
+            <p className="mt-3 rounded-md bg-green-50 px-3 py-2 text-sm text-green-800">Item added successfully.</p>
+          )}
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-base font-bold text-slate-900">
               Menu items <span className="text-slate-400">({menuItems.length})</span>
@@ -340,4 +452,4 @@ function StatCard({ label, data, tone }: { label: string; data: StatsRow | null;
       </div>
     </div>
   );
-             }
+                                            }
