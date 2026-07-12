@@ -59,6 +59,8 @@ function AdminInner() {
   const [topItems, setTopItems] = useState<any[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   const loadAll = useCallback(async () => {
     const results = await Promise.all([
@@ -83,11 +85,58 @@ function AdminInner() {
     setByStatus((results[6].data as any[]) ?? []);
     setTopItems((results[7].data as any[]) ?? []);
     setMenuItems((results[8].data as MenuItem[]) ?? []);
+    setLastUpdated(new Date());
   }, []);
 
   useEffect(() => {
     loadAll();
+    const interval = setInterval(loadAll, 45000);
+    return () => clearInterval(interval);
   }, [loadAll]);
+
+  const exportCsv = useCallback(async () => {
+    setExporting(true);
+    setError(null);
+    try {
+      const { data, error } = await supabase
+        .from("Republic_Data")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      const rows = data ?? [];
+      if (rows.length === 0) {
+        setError("No orders to export.");
+        return;
+      }
+      const headers = Object.keys(rows[0]);
+      const escapeCsv = (val: unknown) => {
+        const s = val == null ? "" : String(val);
+        if (s.includes(",") || s.includes('"') || s.includes("\n")) {
+          return `"${s.replace(/"/g, '""')}"`;
+        }
+        return s;
+      };
+      const csvLines = [
+        headers.join(","),
+        ...rows.map((row: Record<string, unknown>) => headers.map((h) => escapeCsv(row[h])).join(",")),
+      ];
+      const csvContent = csvLines.join("\n");
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const dateStr = new Date().toISOString().slice(0, 10);
+      link.href = url;
+      link.download = `orders-export-${dateStr}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Export failed");
+    } finally {
+      setExporting(false);
+    }
+  }, []);
 
   const toggleAvailable = async (item: MenuItem) => {
     const next = !item.is_available;
@@ -123,7 +172,19 @@ function AdminInner() {
               <p className="text-xs text-slate-500">Analytics & menu control</p>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-3">
+            {lastUpdated && (
+              <span className="hidden text-xs text-slate-400 sm:inline">
+                Updated {lastUpdated.toLocaleTimeString()}
+              </span>
+            )}
+            <button
+              onClick={exportCsv}
+              disabled={exporting}
+              className="rounded-full bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+            >
+              {exporting ? "Exporting…" : "Export CSV"}
+            </button>
             <Link to="/" className="rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200">
               ← Dashboard
             </Link>
@@ -279,4 +340,4 @@ function StatCard({ label, data, tone }: { label: string; data: StatsRow | null;
       </div>
     </div>
   );
-}
+             }
