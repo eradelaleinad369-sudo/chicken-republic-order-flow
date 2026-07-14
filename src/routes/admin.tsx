@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState, useCallback, type FormEvent } from "react";
-import { supabase, type MenuItem } from "@/lib/supabase";
+import { supabase, type MenuItem, type Category } from "@/lib/supabase";
 import type { Session } from "@supabase/supabase-js";
 import {
   BarChart,
@@ -58,9 +58,14 @@ function AdminInner() {
   const [byStatus, setByStatus] = useState<any[]>([]);
   const [topItems, setTopItems] = useState<any[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [addingCategory, setAddingCategory] = useState(false);
+  const [categoryError, setCategoryError] = useState<string | null>(null);
+  const [deletingItemId, setDeletingItemId] = useState<number | string | null>(null);
   const [newItemName, setNewItemName] = useState("");
   const [newItemPrice, setNewItemPrice] = useState("");
-  const [newItemCategory, setNewItemCategory] = useState("Top Sellers");
+  const [newItemCategory, setNewItemCategory] = useState("");
   const [newItemEmoji, setNewItemEmoji] = useState("");
   const [newItemImage, setNewItemImage] = useState<File | null>(null);
   const [addingItem, setAddingItem] = useState(false);
@@ -81,6 +86,7 @@ function AdminInner() {
       supabase.from("v_orders_by_status").select("*"),
       supabase.from("v_top_items_best_effort").select("*"),
       supabase.from("menu_items").select("*").order("id"),
+      supabase.from("categories").select("*").order("display_order"),
     ]);
     const firstErr = results.find((r) => r.error)?.error;
     if (firstErr) setError(firstErr.message);
@@ -93,6 +99,7 @@ function AdminInner() {
     setByStatus((results[6].data as any[]) ?? []);
     setTopItems((results[7].data as any[]) ?? []);
     setMenuItems((results[8].data as MenuItem[]) ?? []);
+    setCategories((results[9].data as Category[]) ?? []);
     setLastUpdated(new Date());
   }, []);
 
@@ -101,6 +108,12 @@ function AdminInner() {
     const interval = setInterval(loadAll, 45000);
     return () => clearInterval(interval);
   }, [loadAll]);
+
+  useEffect(() => {
+    if (!newItemCategory && categories.length > 0) {
+      setNewItemCategory(categories[0].name);
+    }
+  }, [categories, newItemCategory]);
 
   const exportCsv = useCallback(async () => {
     setExporting(true);
@@ -146,6 +159,64 @@ function AdminInner() {
     }
   }, []);
 
+  const addCategory = async (e: FormEvent) => {
+    e.preventDefault();
+    setCategoryError(null);
+    const trimmed = newCategoryName.trim();
+    if (!trimmed) {
+      setCategoryError("Category name is required.");
+      return;
+    }
+    if (categories.some((c) => c.name.toLowerCase() === trimmed.toLowerCase())) {
+      setCategoryError("A category with this name already exists.");
+      return;
+    }
+    setAddingCategory(true);
+    const nextOrder = categories.length > 0 ? Math.max(...categories.map((c) => c.display_order)) + 1 : 1;
+    const { data, error } = await supabase
+      .from("categories")
+      .insert({ name: trimmed, display_order: nextOrder })
+      .select()
+      .single();
+    setAddingCategory(false);
+    if (error) {
+      setCategoryError(error.message);
+      return;
+    }
+    setCategories((prev) => [...prev, data as Category]);
+    setNewCategoryName("");
+  };
+
+  const deleteCategory = async (category: Category) => {
+    const itemsInCategory = menuItems.filter((m) => m.category === category.name).length;
+    const warning =
+      itemsInCategory > 0
+        ? `Delete "${category.name}"? This will also permanently delete ${itemsInCategory} menu item(s) in this category. This cannot be undone.`
+        : `Delete "${category.name}"? This cannot be undone.`;
+    if (!window.confirm(warning)) return;
+
+    const { error } = await supabase.rpc("delete_category_cascade", { target_category: category.name });
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    setCategories((prev) => prev.filter((c) => c.id !== category.id));
+    setMenuItems((prev) => prev.filter((m) => m.category !== category.name));
+  };
+
+  const deleteMenuItem = async (item: MenuItem) => {
+    const name = item.name || item.item_name || `Item #${item.id}`;
+    if (!window.confirm(`Delete "${name}"? This cannot be undone.`)) return;
+    setDeletingItemId(item.id);
+    const { error } = await supabase.from("menu_items").delete().eq("id", item.id);
+    setDeletingItemId(null);
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    setMenuItems((prev) => prev.filter((m) => m.id !== item.id));
+  };
+
   const toggleAvailable = async (item: MenuItem) => {
     const next = !item.is_available;
     setMenuItems((prev) => prev.map((m) => (m.id === item.id ? { ...m, is_available: next } : m)));
@@ -170,6 +241,10 @@ function AdminInner() {
     }
     if (!newItemPrice || isNaN(priceNum) || priceNum <= 0) {
       setAddItemError("Price must be a number greater than 0.");
+      return;
+    }
+    if (!newItemCategory) {
+      setAddItemError("Please add and select a category first.");
       return;
     }
 
@@ -360,6 +435,57 @@ function AdminInner() {
         </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="mb-4 text-base font-bold text-slate-900">
+            Categories <span className="text-slate-400">({categories.length})</span>
+          </h2>
+          <form onSubmit={addCategory} className="mb-4 flex flex-col gap-2 sm:flex-row">
+            <input
+              type="text"
+              value={newCategoryName}
+              onChange={(e) => setNewCategoryName(e.target.value)}
+              placeholder="New category name"
+              className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
+            />
+            <button
+              type="submit"
+              disabled={addingCategory}
+              className="rounded-lg bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-50"
+            >
+              {addingCategory ? "Adding…" : "Add Category"}
+            </button>
+          </form>
+          {categoryError && (
+            <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-800">{categoryError}</p>
+          )}
+          <ul className="divide-y divide-slate-100">
+            {categories.map((c) => {
+              const itemCount = menuItems.filter((m) => m.category === c.name).length;
+              return (
+                <li key={c.id} className="flex items-center justify-between gap-4 py-3">
+                  <div>
+                    <div className="font-semibold text-slate-800">{c.name}</div>
+                    <div className="text-xs text-slate-500">
+                      {itemCount} item{itemCount === 1 ? "" : "s"}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => deleteCategory(c)}
+                    className="rounded-lg px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50"
+                  >
+                    Delete
+                  </button>
+                </li>
+              );
+            })}
+            {categories.length === 0 && (
+              <li className="py-6 text-center text-sm text-slate-500">
+                No categories yet — add one above to get started.
+              </li>
+            )}
+          </ul>
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="mb-4 text-base font-bold text-slate-900">Add new menu item</h2>
           <form onSubmit={addMenuItem} className="grid grid-cols-1 gap-3 sm:grid-cols-4">
             <input
@@ -381,14 +507,18 @@ function AdminInner() {
             <select
               value={newItemCategory}
               onChange={(e) => setNewItemCategory(e.target.value)}
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
+              disabled={categories.length === 0}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none disabled:bg-slate-100"
             >
-              <option>Top Sellers</option>
-              <option>Burgers & Sandwiches</option>
-              <option>Citizens Meals</option>
-              <option>Drinks</option>
-              <option>POT Meals</option>
-              <option>Tasty Sides</option>
+              {categories.length === 0 ? (
+                <option value="">Add a category first</option>
+              ) : (
+                categories.map((c) => (
+                  <option key={c.id} value={c.name}>
+                    {c.name}
+                  </option>
+                ))
+              )}
             </select>
             <input
               type="text"
@@ -452,6 +582,13 @@ function AdminInner() {
                         available ? "translate-x-7" : "translate-x-1"
                       }`}
                     />
+                  </button>
+                  <button
+                    onClick={() => deleteMenuItem(m)}
+                    disabled={deletingItemId === m.id}
+                    className="rounded-lg px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
+                  >
+                    {deletingItemId === m.id ? "Deleting…" : "Delete"}
                   </button>
                 </li>
               );
