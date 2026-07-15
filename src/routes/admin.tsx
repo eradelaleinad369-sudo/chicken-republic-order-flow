@@ -120,7 +120,7 @@ function AdminInner() {
     setError(null);
     try {
       const { data, error } = await supabase
-        .from("orders")  // <-- THIS IS THE ONLY CHANGE
+        .from("Republic_Data")
         .select("*")
         .order("created_at", { ascending: false });
       if (error) throw error;
@@ -491,4 +491,130 @@ function AdminInner() {
             <input
               type="text"
               value={newItemName}
-              onChange={(e) => setNewItemNa
+              onChange={(e) => setNewItemName(e.target.value)}
+              placeholder="Item name"
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none sm:col-span-2"
+            />
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              value={newItemPrice}
+              onChange={(e) => setNewItemPrice(e.target.value)}
+              placeholder="Price (₦)"
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
+            />
+            <select
+              value={newItemCategory}
+              onChange={(e) => setNewItemCategory(e.target.value)}
+              disabled={categories.length === 0}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none disabled:bg-slate-100"
+            >
+              {categories.length === 0 ? (
+                <option value="">Add a category first</option>
+              ) : (
+                categories.map((c) => (
+                  <option key={c.id} value={c.name}>
+                    {c.name}
+                  </option>
+                ))
+              )}
+            </select>
+            <input
+              type="text"
+              value={newItemEmoji}
+              onChange={(e) => setNewItemEmoji(e.target.value)}
+              placeholder="Emoji (optional)"
+              maxLength={4}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
+            />
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => setNewItemImage(e.target.files?.[0] ?? null)}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm file:mr-2 file:rounded-md file:border-0 file:bg-slate-100 file:px-2 file:py-1 file:text-xs focus:border-slate-500 focus:outline-none"
+            />
+            <button
+              type="submit"
+              disabled={addingItem}
+              className="rounded-lg bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-50 sm:col-span-3"
+            >
+              {addingItem ? "Adding…" : "Add Item"}
+            </button>
+          </form>
+          {addItemError && (
+            <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-800">{addItemError}</p>
+          )}
+          {addItemSuccess && (
+            <p className="mt-3 rounded-md bg-green-50 px-3 py-2 text-sm text-green-800">Item added successfully.</p>
+          )}
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-base font-bold text-slate-900">
+              Menu items <span className="text-slate-400">({menuItems.length})</span>
+            </h2>
+            <span className="text-xs text-slate-500">Toggle availability for customer ordering</span>
+          </div>
+          <ul className="divide-y divide-slate-100">
+            {menuItems.map((m) => {
+              const name = m.name || m.item_name || `Item #${m.id}`;
+              const available = !!m.is_available;
+              return (
+                <li key={m.id} className="flex items-center justify-between gap-4 py-3">
+                  <div>
+                    <div className="font-semibold text-slate-800">{name}</div>
+                    <div className="text-xs text-slate-500">
+                      {m.category ? `${m.category} · ` : ""}
+                      {m.price != null ? `₦${Number(m.price).toLocaleString()}` : ""}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => toggleAvailable(m)}
+                    className={`relative inline-flex h-8 w-14 items-center rounded-full transition ${
+                      available ? "bg-green-600" : "bg-slate-300"
+                    }`}
+                    aria-pressed={available}
+                  >
+                    <span
+                      className={`inline-block h-6 w-6 transform rounded-full bg-white shadow transition ${
+                        available ? "translate-x-7" : "translate-x-1"
+                      }`}
+                    />
+                  </button>
+                  <button
+                    onClick={() => deleteMenuItem(m)}
+                    disabled={deletingItemId === m.id}
+                    className="rounded-lg px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
+                  >
+                    {deletingItemId === m.id ? "Deleting…" : "Delete"}
+                  </button>
+                </li>
+              );
+            })}
+            {menuItems.length === 0 && <li className="py-6 text-center text-sm text-slate-500">No menu items.</li>}
+          </ul>
+        </section>
+      </main>
+    </div>
+  );
+}
+
+function StatCard({ label, data, tone }: { label: string; data: StatsRow | null; tone: string }) {
+  const revenue = Number(data?.revenue ?? 0);
+  const count = Number(data?.order_count ?? 0);
+  const avg = Number(data?.avg_order_value ?? 0);
+  return (
+    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className={`px-5 py-2 text-xs font-bold uppercase tracking-wide text-white ${tone}`}>{label}</div>
+      <div className="p-5">
+        <div className="text-3xl font-extrabold text-slate-900">₦{revenue.toLocaleString()}</div>
+        <div className="mt-2 flex justify-between text-sm text-slate-600">
+          <span><span className="font-bold text-slate-900">{count}</span> orders</span>
+          <span>avg <span className="font-bold text-slate-900">₦{Math.round(avg).toLocaleString()}</span></span>
+        </div>
+      </div>
+    </div>
+  );
+}
