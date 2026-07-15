@@ -299,7 +299,7 @@ function DashboardInner({ userEmail }: { userEmail: string }) {
             </div>
             <div>
               <h1 className="text-xl font-bold tracking-tight text-slate-900">
-                Chicken Republic
+                My Kitchen 
               </h1>
               <div className="flex items-center gap-1.5 text-xs text-slate-500">
                 <span
