@@ -2,7 +2,6 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState, useCallback, type FormEvent } from "react";
 import { supabase, type MenuItem, type Category } from "@/lib/supabase";
 import type { Session } from "@supabase/supabase-js";
-import { removeBackground as imglyRemoveBackground } from "@imgly/background-removal";
 import {
   BarChart,
   Bar,
@@ -69,8 +68,6 @@ function AdminInner() {
   const [newItemCategory, setNewItemCategory] = useState("");
   const [newItemEmoji, setNewItemEmoji] = useState("");
   const [newItemImage, setNewItemImage] = useState<File | null>(null);
-  const [removingBg, setRemovingBg] = useState(false);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [addingItem, setAddingItem] = useState(false);
   const [addItemError, setAddItemError] = useState<string | null>(null);
   const [addItemSuccess, setAddItemSuccess] = useState(false);
@@ -123,7 +120,7 @@ function AdminInner() {
     setError(null);
     try {
       const { data, error } = await supabase
-        .from("Republic_Data")
+        .from("orders")
         .select("*")
         .order("created_at", { ascending: false });
       if (error) throw error;
@@ -230,31 +227,6 @@ function AdminInner() {
     }
   };
 
-  const handleImageSelect = async (file: File | null) => {
-    if (!file) {
-      setNewItemImage(null);
-      setImagePreview(null);
-      return;
-    }
-    setRemovingBg(true);
-    try {
-      const resultBlob = await imglyRemoveBackground(file);
-      const processedFile = new File(
-        [resultBlob],
-        file.name.replace(/\.[^.]+$/, "") + ".png",
-        { type: "image/png" },
-      );
-      setNewItemImage(processedFile);
-      setImagePreview(URL.createObjectURL(resultBlob));
-    } catch (err) {
-      // If background removal fails for any reason, fall back to the original photo
-      setNewItemImage(file);
-      setImagePreview(URL.createObjectURL(file));
-    } finally {
-      setRemovingBg(false);
-    }
-  };
-
   const addMenuItem = async (e: FormEvent) => {
     e.preventDefault();
     setAddItemError(null);
@@ -320,7 +292,6 @@ function AdminInner() {
     setNewItemPrice("");
     setNewItemEmoji("");
     setNewItemImage(null);
-    setImagePreview(null);
     setAddItemSuccess(true);
     setTimeout(() => setAddItemSuccess(false), 3000);
   };
@@ -560,20 +531,9 @@ function AdminInner() {
             <input
               type="file"
               accept="image/*"
-              disabled={removingBg}
-              onChange={(e) => handleImageSelect(e.target.files?.[0] ?? null)}
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm file:mr-2 file:rounded-md file:border-0 file:bg-slate-100 file:px-2 file:py-1 file:text-xs focus:border-slate-500 focus:outline-none disabled:opacity-50"
+              onChange={(e) => setNewItemImage(e.target.files?.[0] ?? null)}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm file:mr-2 file:rounded-md file:border-0 file:bg-slate-100 file:px-2 file:py-1 file:text-xs focus:border-slate-500 focus:outline-none"
             />
-            {removingBg && (
-              <p className="text-xs text-slate-500 sm:col-span-4">Removing background…</p>
-            )}
-            {imagePreview && !removingBg && (
-              <img
-                src={imagePreview}
-                alt="Preview"
-                className="h-20 w-20 rounded-lg border border-slate-200 object-contain bg-[repeating-conic-gradient(#e2e8f0_0%_25%,white_0%_50%)] bg-[length:12px_12px] sm:col-span-4"
-              />
-            )}
             <button
               type="submit"
               disabled={addingItem}
