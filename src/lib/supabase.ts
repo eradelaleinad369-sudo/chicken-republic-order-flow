@@ -47,6 +47,7 @@ export interface MenuItem {
   price?: number | null;
   category?: string | null;
   is_available: boolean | null;
+  price_variants?: { label: string; price: number }[] | null;
 }
 
 export interface Category {
