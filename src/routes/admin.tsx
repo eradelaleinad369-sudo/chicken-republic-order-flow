@@ -68,6 +68,10 @@ function AdminInner() {
   const [newItemCategory, setNewItemCategory] = useState("");
   const [newItemEmoji, setNewItemEmoji] = useState("");
   const [newItemImage, setNewItemImage] = useState<File | null>(null);
+  const [hasVariants, setHasVariants] = useState(false);
+  const [variantRows, setVariantRows] = useState<{ label: string; price: string }[]>([
+    { label: "", price: "" },
+  ]);
   const [addingItem, setAddingItem] = useState(false);
   const [addItemError, setAddItemError] = useState<string | null>(null);
   const [addItemSuccess, setAddItemSuccess] = useState(false);
@@ -233,16 +237,34 @@ function AdminInner() {
     setAddItemSuccess(false);
 
     const trimmedName = newItemName.trim();
-    const priceNum = parseFloat(newItemPrice);
 
     if (!trimmedName) {
       setAddItemError("Name is required.");
       return;
     }
-    if (!newItemPrice || isNaN(priceNum) || priceNum <= 0) {
-      setAddItemError("Price must be a number greater than 0.");
-      return;
+
+    let priceToSave: number;
+    let variantsToSave: { label: string; price: number }[] | null = null;
+
+    if (hasVariants) {
+      const cleaned = variantRows
+        .map((v) => ({ label: v.label.trim(), price: parseFloat(v.price) }))
+        .filter((v) => v.label && !isNaN(v.price) && v.price > 0);
+      if (cleaned.length === 0) {
+        setAddItemError("Add at least one size with a label and a price greater than 0.");
+        return;
+      }
+      variantsToSave = cleaned;
+      priceToSave = Math.min(...cleaned.map((v) => v.price));
+    } else {
+      const priceNum = parseFloat(newItemPrice);
+      if (!newItemPrice || isNaN(priceNum) || priceNum <= 0) {
+        setAddItemError("Price must be a number greater than 0.");
+        return;
+      }
+      priceToSave = priceNum;
     }
+
     if (!newItemCategory) {
       setAddItemError("Please add and select a category first.");
       return;
@@ -272,7 +294,8 @@ function AdminInner() {
       .from("menu_items")
       .insert({
         name: trimmedName,
-        price: priceNum,
+        price: priceToSave,
+        price_variants: variantsToSave,
         category: newItemCategory,
         emoji: newItemEmoji.trim() || null,
         image_url: imageUrl,
@@ -292,6 +315,8 @@ function AdminInner() {
     setNewItemPrice("");
     setNewItemEmoji("");
     setNewItemImage(null);
+    setHasVariants(false);
+    setVariantRows([{ label: "", price: "" }]);
     setAddItemSuccess(true);
     setTimeout(() => setAddItemSuccess(false), 3000);
   };
@@ -487,57 +512,120 @@ function AdminInner() {
 
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="mb-4 text-base font-bold text-slate-900">Add new menu item</h2>
-          <form onSubmit={addMenuItem} className="grid grid-cols-1 gap-3 sm:grid-cols-4">
-            <input
-              type="text"
-              value={newItemName}
-              onChange={(e) => setNewItemName(e.target.value)}
-              placeholder="Item name"
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none sm:col-span-2"
-            />
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              value={newItemPrice}
-              onChange={(e) => setNewItemPrice(e.target.value)}
-              placeholder="Price (₦)"
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
-            />
-            <select
-              value={newItemCategory}
-              onChange={(e) => setNewItemCategory(e.target.value)}
-              disabled={categories.length === 0}
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none disabled:bg-slate-100"
-            >
-              {categories.length === 0 ? (
-                <option value="">Add a category first</option>
-              ) : (
-                categories.map((c) => (
-                  <option key={c.id} value={c.name}>
-                    {c.name}
-                  </option>
-                ))
+          <form onSubmit={addMenuItem} className="space-y-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+              <input
+                type="text"
+                value={newItemName}
+                onChange={(e) => setNewItemName(e.target.value)}
+                placeholder="Item name"
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none sm:col-span-2"
+              />
+              {!hasVariants && (
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={newItemPrice}
+                  onChange={(e) => setNewItemPrice(e.target.value)}
+                  placeholder="Price (₦)"
+                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
+                />
               )}
-            </select>
-            <input
-              type="text"
-              value={newItemEmoji}
-              onChange={(e) => setNewItemEmoji(e.target.value)}
-              placeholder="Emoji (optional)"
-              maxLength={4}
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
-            />
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(e) => setNewItemImage(e.target.files?.[0] ?? null)}
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm file:mr-2 file:rounded-md file:border-0 file:bg-slate-100 file:px-2 file:py-1 file:text-xs focus:border-slate-500 focus:outline-none"
-            />
+              <select
+                value={newItemCategory}
+                onChange={(e) => setNewItemCategory(e.target.value)}
+                disabled={categories.length === 0}
+                className={`rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none disabled:bg-slate-100 ${hasVariants ? "sm:col-span-1" : ""}`}
+              >
+                {categories.length === 0 ? (
+                  <option value="">Add a category first</option>
+                ) : (
+                  categories.map((c) => (
+                    <option key={c.id} value={c.name}>
+                      {c.name}
+                    </option>
+                  ))
+                )}
+              </select>
+              <input
+                type="text"
+                value={newItemEmoji}
+                onChange={(e) => setNewItemEmoji(e.target.value)}
+                placeholder="Emoji (optional)"
+                maxLength={4}
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
+              />
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => setNewItemImage(e.target.files?.[0] ?? null)}
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm file:mr-2 file:rounded-md file:border-0 file:bg-slate-100 file:px-2 file:py-1 file:text-xs focus:border-slate-500 focus:outline-none sm:col-span-2"
+              />
+            </div>
+
+            <label className="flex items-center gap-2 text-sm text-slate-600">
+              <input
+                type="checkbox"
+                checked={hasVariants}
+                onChange={(e) => setHasVariants(e.target.checked)}
+                className="h-4 w-4 rounded border-slate-300"
+              />
+              This item has multiple sizes/prices (e.g. Bread: Small ₦200, Medium ₦300…)
+            </label>
+
+            {hasVariants && (
+              <div className="space-y-2 rounded-lg bg-slate-50 p-3">
+                {variantRows.map((row, i) => (
+                  <div key={i} className="flex gap-2">
+                    <input
+                      type="text"
+                      value={row.label}
+                      onChange={(e) => {
+                        const next = [...variantRows];
+                        next[i] = { ...next[i], label: e.target.value };
+                        setVariantRows(next);
+                      }}
+                      placeholder="Size label (e.g. Small)"
+                      className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    />
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={row.price}
+                      onChange={(e) => {
+                        const next = [...variantRows];
+                        next[i] = { ...next[i], price: e.target.value };
+                        setVariantRows(next);
+                      }}
+                      placeholder="Price (₦)"
+                      className="w-32 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setVariantRows(variantRows.filter((_, idx) => idx !== i))}
+                      disabled={variantRows.length === 1}
+                      className="rounded-lg px-3 text-sm font-semibold text-red-600 disabled:opacity-30"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setVariantRows([...variantRows, { label: "", price: "" }])}
+                  className="rounded-lg bg-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700"
+                >
+                  + Add another size
+                </button>
+              </div>
+            )}
+
             <button
               type="submit"
               disabled={addingItem}
-              className="rounded-lg bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-50 sm:col-span-3"
+              className="w-full rounded-lg bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-50 sm:w-auto"
             >
               {addingItem ? "Adding…" : "Add Item"}
             </button>
